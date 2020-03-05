@@ -1,0 +1,272 @@
+<!DOCTYPE html><html lang="zh-CN"><head><meta name="generator" content="Hexo 3.8.0"><meta http-equiv="content-type" content="text/html; charset=utf-8"><meta content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=0" name="viewport"><meta content="yes" name="apple-mobile-web-app-capable"><meta content="black-translucent" name="apple-mobile-web-app-status-bar-style"><meta content="telephone=no" name="format-detection"><meta name="description" content="Code controls all the hardware"><title>Linux内核调试之KGDB | Evil Code</title><link rel="stylesheet" type="text/css" href="/css/style.css?v=0.0.0"><link rel="stylesheet" type="text/css" href="//lib.baomitu.com/normalize/8.0.1/normalize.min.css"><link rel="stylesheet" type="text/css" href="//lib.baomitu.com/pure/1.0.0/pure-min.css"><link rel="stylesheet" type="text/css" href="//lib.baomitu.com/pure/1.0.0/grids-responsive-min.css"><link rel="stylesheet" href="//lib.baomitu.com/font-awesome/4.7.0/css/font-awesome.min.css"><script type="text/javascript" src="//lib.baomitu.com/jquery/3.3.1/jquery.min.js"></script><link rel="icon" mask sizes="any" href="/favicon.ico"><link rel="Shortcut Icon" type="image/x-icon" href="/favicon.ico"><link rel="apple-touch-icon" href="/apple-touch-icon.png"><link rel="apple-touch-icon-precomposed" href="/apple-touch-icon.png"></head><body><div class="body_container"><div id="header"><div class="site-name"><h1 class="hidden">Linux内核调试之KGDB</h1><a id="logo" href="/.">Evil Code</a><p class="description">Coding Change The World</p></div><div id="nav-menu"><a class="current" href="/."><i class="fa fa-home"> 首页</i></a><a href="/archives/"><i class="fa fa-archive"> 归档</i></a><a href="/about/"><i class="fa fa-user"> 关于</i></a></div></div><div class="pure-g" id="layout"><div class="pure-u-1 pure-u-md-3-4"><div class="content_container"><div class="post"><h1 class="post-title">Linux内核调试之KGDB</h1><div class="post-meta">Mar 5, 2020<span> | </span><span class="category"><a href="/categories/Kernel/">Kernel</a></span></div><div class="clear"><div class="toc-article" id="toc"><div class="toc-title">文章目录</div><ol class="toc"><li class="toc-item toc-level-2"><a class="toc-link" href="#KGDB调试ARM开发板"><span class="toc-number">1.</span> <span class="toc-text">KGDB调试ARM开发板</span></a><ol class="toc-child"><li class="toc-item toc-level-3"><a class="toc-link" href="#目标机内核配置"><span class="toc-number">1.1.</span> <span class="toc-text">目标机内核配置</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#gdb移植"><span class="toc-number">1.2.</span> <span class="toc-text">gdb移植</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#调试实例"><span class="toc-number">1.3.</span> <span class="toc-text">调试实例</span></a><ol class="toc-child"><li class="toc-item toc-level-4"><a class="toc-link" href="#Qemu-ARM虚拟机调试"><span class="toc-number">1.3.1.</span> <span class="toc-text">Qemu ARM虚拟机调试</span></a></li><li class="toc-item toc-level-4"><a class="toc-link" href="#开发板调试"><span class="toc-number">1.3.2.</span> <span class="toc-text">开发板调试</span></a></li></ol></li></ol></li><li class="toc-item toc-level-2"><a class="toc-link" href="#KDB调试"><span class="toc-number">2.</span> <span class="toc-text">KDB调试</span></a><ol class="toc-child"><li class="toc-item toc-level-3"><a class="toc-link" href="#先决条件"><span class="toc-number">2.1.</span> <span class="toc-text">先决条件</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#进入和退出kdb"><span class="toc-number">2.2.</span> <span class="toc-text">进入和退出kdb</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#kdb获取help信息"><span class="toc-number">2.3.</span> <span class="toc-text">kdb获取help信息</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#kdb命令说明"><span class="toc-number">2.4.</span> <span class="toc-text">kdb命令说明</span></a></li></ol></li></ol></div></div><div class="post-content"><h2 id="KGDB调试ARM开发板"><a href="#KGDB调试ARM开发板" class="headerlink" title="KGDB调试ARM开发板"></a>KGDB调试ARM开发板</h2><h3 id="目标机内核配置"><a href="#目标机内核配置" class="headerlink" title="目标机内核配置"></a>目标机内核配置</h3><p>1.配置kgdb</p>
+<figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br></pre></td><td class="code"><pre><span class="line">Kernel hacking  ---&gt;</span><br><span class="line">	[*] KGDB: kernel debugger  ---&gt;</span><br><span class="line">		--- KGDB: kernel debugger</span><br><span class="line">		&lt;*&gt;   KGDB: use kgdb over the serial console</span><br><span class="line">		[ ]   KGDB: internal test suite</span><br><span class="line">		[*]   KGDB_KDB: include kdb frontend for kgdb</span><br><span class="line">		(0x1)   KDB: Select kdb command functions to be enabled by default</span><br><span class="line">		[ ]     KGDB_KDB: keyboard as input device</span><br><span class="line">		(0)     KDB: continue after catastrophic errors</span><br></pre></td></tr></table></figure>
+<p>2.配置vmlinux符号信息</p>
+<figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">Kernel hacking  ---&gt;</span><br><span class="line">	Compile-time checks and compiler options  ---&gt;</span><br><span class="line">		[*] Compile the kernel with debug info</span><br></pre></td></tr></table></figure>
+<h3 id="gdb移植"><a href="#gdb移植" class="headerlink" title="gdb移植"></a>gdb移植</h3><p>下载gdb源码（以8.0.1版本为例）：</p>
+<figure class="highlight shell"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">wget http://ftp.gnu.org/gnu/gdb/gdb-8.0.1.tar.xz</span><br></pre></td></tr></table></figure>
+<p>解压并配置gdb源码：</p>
+<figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">tar -xf gdb-8.0.1.tar.xz</span><br><span class="line">cd gdb-8.0.1</span><br><span class="line">./configure --target=arm-linux --prefix=/root/work/arm/gdb/gdb-8.0.1/_install</span><br></pre></td></tr></table></figure>
+<p>编译和安装：</p>
+<figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">make</span><br><span class="line">make install</span><br></pre></td></tr></table></figure>
+<p>安装完成后在配置指定的prefix目录中的bin目录下可找到目标程序arm-linux-gdb。</p>
+<h3 id="调试实例"><a href="#调试实例" class="headerlink" title="调试实例"></a>调试实例</h3><h4 id="Qemu-ARM虚拟机调试"><a href="#Qemu-ARM虚拟机调试" class="headerlink" title="Qemu ARM虚拟机调试"></a>Qemu ARM虚拟机调试</h4><p>启动ARM虚拟机，传入kgdboc并将虚拟机的输出串口重定向到tcp端口12345，启动参数如下：</p>
+<figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">qemu-system-arm -M vexpress-a9 -m 512M -kernel zImage -dtb vexpress-v2p-ca9.dtb -nographic -append &quot;root=/dev/mmcblk0 rw console=ttyAMA0 kgdboc=ttyAMA0,115200 kgdbwait&quot; -sd virtsd.ext2 -net nic,vlan=0 -net tap,vlan=0 -serial tcp::12345,server</span><br></pre></td></tr></table></figure>
+<p>接着在宿主机内执行gdb程序调试vmlinux：</p>
+<figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">arm-linux-gdb vmlinux</span><br></pre></td></tr></table></figure>
+<p>成功进入gdb后输出内容如下：</p>
+<figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br></pre></td><td class="code"><pre><span class="line">GNU gdb (GDB) 8.0.1</span><br><span class="line">Copyright (C) 2017 Free Software Foundation, Inc.</span><br><span class="line">License GPLv3+: GNU GPL version 3 or later &lt;http://gnu.org/licenses/gpl.html&gt;</span><br><span class="line">This is free software: you are free to change and redistribute it.</span><br><span class="line">There is NO WARRANTY, to the extent permitted by law.  Type &quot;show copying&quot;</span><br><span class="line">and &quot;show warranty&quot; for details.</span><br><span class="line">This GDB was configured as &quot;--host=x86_64-pc-linux-gnu --target=arm-linux&quot;.</span><br><span class="line">Type &quot;show configuration&quot; for configuration details.</span><br><span class="line">For bug reporting instructions, please see:</span><br><span class="line">&lt;http://www.gnu.org/software/gdb/bugs/&gt;.</span><br><span class="line">Find the GDB manual and other documentation resources online at:</span><br><span class="line">&lt;http://www.gnu.org/software/gdb/documentation/&gt;.</span><br><span class="line">For help, type &quot;help&quot;.</span><br><span class="line">Type &quot;apropos word&quot; to search for commands related to &quot;word&quot;...</span><br><span class="line">Reading symbols from /root/work/arm/kernel/linux-5.3.4/vmlinux...done.</span><br><span class="line">(gdb)</span><br></pre></td></tr></table></figure>
+<p>在gdb终端输入以下命令连接gdb服务器：</p>
+<figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">target remote localhost:12345</span><br></pre></td></tr></table></figure>
+<p>连接到gdb服务器后输出内容如下：</p>
+<figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line">(gdb) target remote localhost:12345</span><br><span class="line">Remote debugging using localhost:12345</span><br><span class="line">0x801b54a8 in arch_kgdb_breakpoint () at kernel/debug/debug_core.c:1134</span><br><span class="line">1134		wmb(); /* Sync point before breakpoint */</span><br></pre></td></tr></table></figure>
+<p>此时即可使用gdb命令调试内核。</p>
+<h4 id="开发板调试"><a href="#开发板调试" class="headerlink" title="开发板调试"></a>开发板调试</h4><p>正常启动目标机系统后通过以下命令进入kdb终端（假设串口是ttyAMA0）：</p>
+<figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">echo ttyAMA0 &gt; /sys/module/kgdboc/parameters/kgdboc</span><br><span class="line">echo g &gt; /proc/sysrq-trigger</span><br></pre></td></tr></table></figure>
+<p>（如果需要开机即进入kgdb状态，则在目标板的启动参数中添加如下参数即可：）</p>
+<figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">kgdboc=ttyAMA0,115200 kgdbwait</span><br></pre></td></tr></table></figure>
+<p>进入kdb终端后输入kgdb命令按回车进入kgdb模式，如果内核未开启gdb，则不需要kgdb命令。</p>
+<p>（如果目标机只有一个输出串口，则在调试机操作目标机和运行gdb使用同一个串口，在目标机上完成上述操作后该串口将被gdb用来连接目标机的gdb服务）</p>
+<p>在调试机中首先将串口波特率设置和目标板一致：</p>
+<figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">stty ispeed 115200 ospeed 115200 -F /dev/ttyUSB0</span><br></pre></td></tr></table></figure>
+<p>接着运行gdb调试vmlinux：</p>
+<figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">arm-linux-gdb vmlinux</span><br></pre></td></tr></table></figure>
+<p>进入gdb终端后输入以下指令连接到目标及kgdb：</p>
+<figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">target remote /dev/ttyUSB0</span><br></pre></td></tr></table></figure>
+<p>成功连接到目标板后输出和<strong>Qemu ARM虚拟机调试</strong>中一致。</p>
+<h2 id="KDB调试"><a href="#KDB调试" class="headerlink" title="KDB调试"></a>KDB调试</h2><h3 id="先决条件"><a href="#先决条件" class="headerlink" title="先决条件"></a>先决条件</h3><p>和kgdb不同，kdb不是源码级别的调试工具，Kdb的主要目的是做一些分析，以帮助开发或诊断内核问题。但是kdb仍然可以使用简单的断点。</p>
+<p>kdb可以通过名字访问内核中的一些内核中内建的或模块中的符号，但需要内核开启CONFIG_KALLSYMS设置。</p>
+<p>kdb内核配置：</p>
+<p>主功能配置：CONFIG_KGDB_KDB</p>
+<p>串口配置：CONFIG_KGDB_SERIAL_CONSOLE</p>
+<p>键盘配置：CONFIG_KDB_KEYBOARD</p>
+<p>SYSRQ配置：CONFIG_MAGIC_SYSRQ</p>
+<h3 id="进入和退出kdb"><a href="#进入和退出kdb" class="headerlink" title="进入和退出kdb"></a>进入和退出kdb</h3><p>1.通过kgdboc配置串口</p>
+<figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">echo ttyAMA0 &gt; /sys/module/kgdboc/parameters/kgdboc</span><br></pre></td></tr></table></figure>
+<p>2.配置进入debug模式</p>
+<figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">echo g &gt; /proc/sysrq-trigger</span><br></pre></td></tr></table></figure>
+<p>3.退出kdb命令行</p>
+<figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">kdb&gt; g</span><br></pre></td></tr></table></figure>
+<h3 id="kdb获取help信息"><a href="#kdb获取help信息" class="headerlink" title="kdb获取help信息"></a>kdb获取help信息</h3><p>输入help命令，得到kdb命令列表说明：(kdb&gt;是命令提示符)</p>
+<figure class="highlight shell"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line"><span class="meta">kdb&gt;</span>help</span><br></pre></td></tr></table></figure>
+<h3 id="kdb命令说明"><a href="#kdb命令说明" class="headerlink" title="kdb命令说明"></a>kdb命令说明</h3><table>
+<thead>
+<tr>
+<th>命令</th>
+<th>参数</th>
+<th>说明</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>md</td>
+<td>&lt;vaddr></td>
+<td>显示指定内存地址的内容</td>
+</tr>
+<tr>
+<td>mdr</td>
+<td>&lt;vaddr> &lt;bytes></td>
+<td>显示原始内存</td>
+</tr>
+<tr>
+<td>mdp</td>
+<td>&lt;paddr> &lt;bytes></td>
+<td>显示物理内存</td>
+</tr>
+<tr>
+<td>mds</td>
+<td>&lt;vaddr></td>
+<td>显示内存符号</td>
+</tr>
+<tr>
+<td>mm</td>
+<td>&lt;vaddr> &lt;contents></td>
+<td>修改指定地址的内存内同</td>
+</tr>
+<tr>
+<td>go</td>
+<td>[&lt;vaddr>]</td>
+<td>继续执行，或跳到指定地址执行</td>
+</tr>
+<tr>
+<td>rd</td>
+<td></td>
+<td>显示寄存器的值</td>
+</tr>
+<tr>
+<td>rm</td>
+<td>&lt;reg> &lt;contents></td>
+<td>修改寄存器的值</td>
+</tr>
+<tr>
+<td>ef</td>
+<td>&lt;vaddr></td>
+<td>显示异常帧</td>
+</tr>
+<tr>
+<td>bt</td>
+<td>[&lt;vaddr>]</td>
+<td>栈回溯</td>
+</tr>
+<tr>
+<td>btp</td>
+<td>&lt;pid></td>
+<td>指定地址上的栈显示</td>
+</tr>
+<tr>
+<td>bta</td>
+<td>[D/R/S/T/C/Z/E/U/I/M/A]</td>
+<td>栈回溯所有匹配到状态标记的进程</td>
+</tr>
+<tr>
+<td>btc</td>
+<td></td>
+<td>当前进程在每个cpu上的栈回溯</td>
+</tr>
+<tr>
+<td>btt</td>
+<td>&lt;vaddr></td>
+<td>栈回溯指定struct task地址的进程</td>
+</tr>
+<tr>
+<td>env</td>
+<td></td>
+<td>显示环境变量</td>
+</tr>
+<tr>
+<td>set</td>
+<td></td>
+<td>设置环境变量</td>
+</tr>
+<tr>
+<td>cpu</td>
+<td>&lt;cpunum></td>
+<td>切换到指定cpu上</td>
+</tr>
+<tr>
+<td>kgdb</td>
+<td></td>
+<td>进入kgdb模式</td>
+</tr>
+<tr>
+<td>ps</td>
+<td>[&lt;flags> / A]</td>
+<td>显示活动进程列表</td>
+</tr>
+<tr>
+<td>pid</td>
+<td>&lt;pidnum></td>
+<td>切换到另一个进程</td>
+</tr>
+<tr>
+<td>reboot</td>
+<td></td>
+<td>立即重启</td>
+</tr>
+<tr>
+<td>lsmod</td>
+<td></td>
+<td>查看加载的内核模块</td>
+</tr>
+<tr>
+<td>sr</td>
+<td>&lt;key></td>
+<td>Magic SysRq key</td>
+</tr>
+<tr>
+<td>dmesg</td>
+<td>[lines]</td>
+<td>显示syslog缓冲区</td>
+</tr>
+<tr>
+<td>defcmd</td>
+<td>name “usage” “help”</td>
+<td>定义命令合集，</td>
+</tr>
+<tr>
+<td>kill</td>
+<td><-signal> &lt;pid></-signal></td>
+<td>向进程发送信号</td>
+</tr>
+<tr>
+<td>summary</td>
+<td></td>
+<td>系统总计和概况</td>
+</tr>
+<tr>
+<td>per_cpu</td>
+<td>&lt;sym> [&lt;bytes>] [&lt;cpu>]</td>
+<td>显示每一个cpu上的变量</td>
+</tr>
+<tr>
+<td>grephelp</td>
+<td></td>
+<td>通过管道和grep显示help信息</td>
+</tr>
+<tr>
+<td>bp</td>
+<td>[&lt;vaddr>]</td>
+<td>设置/显示断点</td>
+</tr>
+<tr>
+<td>bl</td>
+<td>[&lt;vaddr>]</td>
+<td>显示断点</td>
+</tr>
+<tr>
+<td>bc</td>
+<td>&lt;bpnum></td>
+<td>清除断点</td>
+</tr>
+<tr>
+<td>be</td>
+<td><bpnum></bpnum></td>
+<td>使能断点</td>
+</tr>
+<tr>
+<td>bd</td>
+<td><bpnum></bpnum></td>
+<td>禁止断点</td>
+</tr>
+<tr>
+<td>ss</td>
+<td></td>
+<td>单步执行</td>
+</tr>
+<tr>
+<td>dumpcommon</td>
+<td></td>
+<td>Common kdb debugging</td>
+</tr>
+<tr>
+<td>dumpall</td>
+<td></td>
+<td>First line debugging</td>
+</tr>
+<tr>
+<td>dumpcpu</td>
+<td></td>
+<td>same as dumpall but only task on cpus</td>
+</tr>
+<tr>
+<td>ftdump</td>
+<td>[skip_#entries] [cpu]</td>
+<td>Dump ftrace log; -skip dumps last #entries</td>
+</tr>
+</tbody>
+</table>
+</div><div class="tags"><a href="/tags/Linux/">Linux</a><a href="/tags/kernel/">kernel</a><a href="/tags/Debug/">Debug</a></div><div class="post-nav"><a class="next" href="/2020/02/29/Linux内核设备驱动模型/">Linux内核设备驱动模型</a></div><div id="container"></div><link rel="stylesheet" href="/css/default.css?v=0.0.0"><script src="/js/gitment.browser.js?v=0.0.0"></script><script>var gitment = new Gitment({
+  id: window.location.pathname.substring(1,window.location.pathname.length),
+  owner: 'geekchenxd',
+  repo: 'geekchenxd.github.io',
+  oauth: {
+    client_id: '00f3259791ebc5b5d412',
+    client_secret: 'd88056bc0050337d5767e26f8d228f526ed7687d',
+  },
+})
+gitment.render('container')
+</script></div></div></div><div class="pure-u-1-4 hidden_mid_and_down"><div id="sidebar"><div class="widget"><form class="search-form" action="//www.google.com/search" method="get" accept-charset="utf-8" target="_blank"><input type="text" name="q" maxlength="20" placeholder="Search"><input type="hidden" name="sitesearch" value="https://www.chenxd.xyz"></form></div><div class="widget"><div class="widget-title"><i class="fa fa-folder-o"> 分类</i></div><ul class="category-list"><li class="category-list-item"><a class="category-list-link" href="/categories/Docker/">Docker</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/Kernel/">Kernel</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/qemu/">qemu</a></li></ul></div><div class="widget"><div class="widget-title"><i class="fa fa-star-o"> 标签</i></div><div class="tagcloud"><a href="/tags/notification/" style="font-size: 15px;">notification</a> <a href="/tags/Linux/" style="font-size: 15px;">Linux</a> <a href="/tags/subsystem/" style="font-size: 15px;">subsystem</a> <a href="/tags/initcall/" style="font-size: 15px;">initcall</a> <a href="/tags/kernel/" style="font-size: 15px;">kernel</a> <a href="/tags/watchdog/" style="font-size: 15px;">watchdog</a> <a href="/tags/Debug/" style="font-size: 15px;">Debug</a> <a href="/tags/Docker/" style="font-size: 15px;">Docker</a> <a href="/tags/dtb/" style="font-size: 15px;">dtb</a> <a href="/tags/dts/" style="font-size: 15px;">dts</a> <a href="/tags/file-system/" style="font-size: 15px;">file_system</a> <a href="/tags/arm/" style="font-size: 15px;">arm</a> <a href="/tags/Interrupt/" style="font-size: 15px;">Interrupt</a> <a href="/tags/usb/" style="font-size: 15px;">usb</a> <a href="/tags/device-driver/" style="font-size: 15px;">device driver</a></div></div><div class="widget"><div class="widget-title"><i class="fa fa-file-o"> 最近文章</i></div><ul class="post-list"><li class="post-list-item"><a class="post-list-link" href="/2020/03/05/Linux内核调试之KGDB/">Linux内核调试之KGDB</a></li><li class="post-list-item"><a class="post-list-link" href="/2020/02/29/Linux内核设备驱动模型/">Linux内核设备驱动模型</a></li><li class="post-list-item"><a class="post-list-link" href="/2020/02/29/Linux内核通知链/">Linux内核通知链</a></li><li class="post-list-item"><a class="post-list-link" href="/2020/02/29/Qemu虚拟Arm开发板/">Qemu虚拟Arm开发板</a></li><li class="post-list-item"><a class="post-list-link" href="/2019/11/26/ARM-LINUX中断系统/">ARM-LINUX中断系统</a></li><li class="post-list-item"><a class="post-list-link" href="/2019/09/25/Linux内核之看门狗子系统/">Linux内核之看门狗子系统</a></li><li class="post-list-item"><a class="post-list-link" href="/2019/09/24/Linux内核之虚拟文件系统/">Linux内核之虚拟文件系统</a></li><li class="post-list-item"><a class="post-list-link" href="/2019/07/28/hello-world/">Hello World</a></li><li class="post-list-item"><a class="post-list-link" href="/2019/06/09/Linux内核usb子系统/">Linux内核usb子系统</a></li><li class="post-list-item"><a class="post-list-link" href="/2019/06/09/Linux内核initcall过程/">Linux内核initcall过程</a></li></ul></div><div class="widget"><div class="widget-title"><i class="fa fa-external-link"> 友情链接</i></div><ul></ul><a href="http://www.github.com" title="github" target="_blank">github</a><ul></ul><a href="http://www.kernel.org" title="linux kernel" target="_blank">linux kernel</a><ul></ul><a href="http://www.combatpress.com/" title="Combat Press" target="_blank">Combat Press</a></div></div></div><div class="pure-u-1 pure-u-md-3-4"><div id="footer">Copyright © 2020 <a href="/." rel="nofollow">Evil Code.</a> Powered by<a rel="nofollow" target="_blank" href="https://hexo.io"> Hexo.</a><a rel="nofollow" target="_blank" href="https://github.com/tufu9441/maupassant-hexo"> Theme</a> by<a rel="nofollow" target="_blank" href="https://github.com/pagecho"> Cho.</a></div></div></div><a class="show" id="rocket" href="#top"></a><script type="text/javascript" src="/js/totop.js?v=0.0.0" async></script><script type="text/javascript" src="//lib.baomitu.com/fancybox/3.5.2/jquery.fancybox.min.js" async></script><script type="text/javascript" src="/js/fancybox.js?v=0.0.0" async></script><link rel="stylesheet" type="text/css" href="//lib.baomitu.com/fancybox/3.5.2/jquery.fancybox.min.css"><script type="text/javascript" src="/js/codeblock-resizer.js?v=0.0.0"></script><script type="text/javascript" src="/js/smartresize.js?v=0.0.0"></script></div></body></html>
